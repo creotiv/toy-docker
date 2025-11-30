@@ -37,7 +37,7 @@ sudo ./toy-docker pull ubuntu:22.04
 sudo ./toy-docker build Dockerfiles/curl.Dockerfile curl-ubuntu
 
 # run a shell in the built image with a bind mount and a port map
-sudo ./toy-docker run -v /host/path:/mnt -p 8080:80 curl-ubuntu /bin/bash
+sudo ./toy-docker run -p 8080:80 curl-ubuntu /bin/curl https://google.com
 ```
 
 ## CLI reference

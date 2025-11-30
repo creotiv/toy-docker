@@ -32,7 +32,7 @@ func BuildImage(dockerfile, name string) error {
 	defer os.RemoveAll(tmp)
 
 	// unpack base image
-	exec.MustRun("tar", "-C", tmp, "-xf", parentDir+"/layer.tar")
+	exec.MustRun("[fs] unpack base image", "tar", "-C", tmp, "-xf", parentDir+"/layer.tar")
 
 	// apply RUN/COPY
 	for _, c := range cmds {
@@ -41,14 +41,14 @@ func BuildImage(dockerfile, name string) error {
 			fmt.Println(">>> RUN", script)
 			// This is how old Docker originally worked
 			// It run command against temporary rootfs
-			exec.MustRun("systemd-nspawn", "-D", tmp, "/bin/bash", "-c", script)
+			exec.MustRun("[fs] run command inside container", "systemd-nspawn", "-D", tmp, "/bin/bash", "-c", script)
 		}
 		if strings.HasPrefix(c, "COPY ") {
 			parts := strings.SplitN(strings.TrimPrefix(c, "COPY "), " ", 2)
 			src := parts[0]
 			dst := parts[1]
-			exec.MustRun("mkdir", "-p", tmp+"/"+dst)
-			exec.MustRun("cp", "-r", src, tmp+"/"+dst)
+			exec.MustRun("[fs] mkdir", "mkdir", "-p", tmp+"/"+dst)
+			exec.MustRun("[fs] copy file", "cp", "-r", src, tmp+"/"+dst)
 		}
 	}
 
@@ -59,7 +59,7 @@ func BuildImage(dockerfile, name string) error {
 	if err := os.MkdirAll(outDir, 0755); err != nil {
 		return fmt.Errorf("create image dir: %w", err)
 	}
-	exec.MustRun("tar", "-C", tmp, "-cf", outDir+"/layer.tar", ".")
+	exec.MustRun("[fs] pack new layer", "tar", "-C", tmp, "-cf", outDir+"/layer.tar", ".")
 
 	meta := Meta{Name: name, Parent: parent}
 	m, _ := json.MarshalIndent(meta, "", "  ")

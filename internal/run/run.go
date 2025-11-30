@@ -27,20 +27,20 @@ type Meta struct {
 
 func ensureBridge() error {
 	// check if exists
-	out, err := exec.RunOut("ip", "link", "show", bridgeName)
+	out, err := exec.RunOut("[net] check bridge", "ip", "link", "show", bridgeName)
 	if err == nil && strings.Contains(out, bridgeName) {
 		fmt.Println("[net] bridge exists: ", bridgeName)
 		return nil
 	}
 
 	fmt.Println("[net] creating bridge", bridgeName)
-	if err := exec.RunOrErr("add bridge", "ip", "link", "add", bridgeName, "type", "bridge"); err != nil {
+	if err := exec.RunOrErr("[net] add bridge", "ip", "link", "add", bridgeName, "type", "bridge"); err != nil {
 		return err
 	}
-	if err := exec.RunOrErr("assign bridge ip", "ip", "addr", "add", bridgeCIDR, "dev", bridgeName); err != nil {
+	if err := exec.RunOrErr("[net] assign bridge ip", "ip", "addr", "add", bridgeCIDR, "dev", bridgeName); err != nil {
 		return err
 	}
-	if err := exec.RunOrErr("bring bridge up", "ip", "link", "set", bridgeName, "up"); err != nil {
+	if err := exec.RunOrErr("[net] bring bridge up", "ip", "link", "set", bridgeName, "up"); err != nil {
 		return err
 	}
 

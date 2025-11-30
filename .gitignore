@@ -1,4 +1,6 @@
 toy-docker
+!toy-docker/
 images/
 containers/
 tmp-test-extract/
+LECTURE.md

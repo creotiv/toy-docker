@@ -3,6 +3,7 @@ package run
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -17,21 +18,26 @@ func Init() {
 	vols := os.Getenv("VOLUMES")
 	cmd := os.Getenv("CMD")
 
-	fmt.Println("[run] Initing the container")
+	fmt.Println("[run] Initing the container --------------------------------")
+	fmt.Println("rootfs = ", rootfs)
+	fmt.Println("cid = ", cid)
+	fmt.Println("cip = ", cip)
+	fmt.Println("veth = ", veth)
+	fmt.Println("vols = ", vols)
+	fmt.Println("cmd = ", cmd)
+	fmt.Println("------------------------------------------------------------")
+
 	// expose netns
 	nsfile := "/var/run/toy-" + cid + ".ns"
 	// bind-mount current netns so parent can join it later
-	exec.MustRun("mount", "--bind", "/proc/self/ns/net", nsfile)
+	exec.MustRun("[fs] mount namespace", "mount", "--bind", "/proc/self/ns/net", nsfile)
 
 	// stop mount events from propagating out of this namespace
-	exec.MustRun("mount", "--make-rprivate", "/")
+	exec.MustRun("[fs] mount private", "mount", "--make-rprivate", "/")
 	// ensure rootfs is a mountpoint we can chroot into
-	exec.MustRun("mount", "--bind", rootfs, rootfs)
+	exec.MustRun("[fs] mount rootfs(hack)", "mount", "--bind", rootfs, rootfs)
 	// provide device nodes (urandom, null, tty, etc.)
-	exec.MustRun("mount", "--rbind", "/dev", rootfs+"/dev")
-
-	// provide /proc inside the container
-	exec.MustRun("mount", "-t", "proc", "proc", rootfs+"/proc")
+	exec.MustRun("[fs] mount dev", "mount", "--rbind", "/dev", rootfs+"/dev")
 
 	// volumes
 	for _, v := range strings.Split(vols, ";") {
@@ -43,31 +49,52 @@ func Init() {
 		dst := rootfs + parts[1]
 		os.MkdirAll(dst, 0755)
 		// bind-mount host path into container path
-		exec.MustRun("mount", "--bind", src, dst)
+		exec.MustRun("[fs] mount volume", "mount", "--bind", src, dst)
 	}
 
 	// network
 	// enable loopback in the container netns
-	exec.MustRun("ip", "link", "set", "lo", "up")
+	exec.MustRun("[net] set loopback up", "ip", "link", "set", "lo", "up")
 	// wait for host to move veth into this netns, then rename to eth0
 	if err := waitForVeth(veth); err != nil {
 		panic(err)
 	}
-	fmt.Println("[run] Initing the container 1")
 	// assign container IP
-	exec.MustRun("ip", "addr", "add", cip+"/24", "dev", "eth0")
+	exec.MustRun("[net] assign IP", "ip", "addr", "add", cip+"/24", "dev", "eth0")
 	// bring eth0 up
-	exec.MustRun("ip", "link", "set", "eth0", "up")
-	fmt.Println("[run] Initing the container 2")
+	exec.MustRun("[net] bring eth0 up", "ip", "link", "set", "eth0", "up")
 	// set default route via host bridge
-	exec.MustRun("ip", "route", "add", "default", "via", "10.200.0.1")
+	exec.MustRun("[net] set default route", "ip", "route", "add", "default", "via", "10.200.0.1")
 
 	// set container hostname
-	exec.MustRun("hostname", "toy-"+cid)
+	exec.MustRun("[net] set hostname", "hostname", "toy-"+cid)
 
-	// chroot + exec MustRun
-	// enter rootfs and run the requested command
-	exec.MustRun("chroot", rootfs, "/bin/bash", "-c", cmd)
+	// pivot to the new root so the host root disappears from this namespace
+	putOld := filepath.Join(rootfs, "old_root")
+	if err := os.MkdirAll(putOld, 0700); err != nil {
+		panic(fmt.Errorf("create put_old: %w", err))
+	}
+	if err := exec.RunOrErr("[fs] pivot_root", "pivot_root", rootfs, putOld); err != nil {
+		panic(fmt.Errorf("pivot_root: %w", err))
+	}
+	if err := os.Chdir("/"); err != nil {
+		panic(fmt.Errorf("chdir to new root: %w", err))
+	}
+
+	// provide /proc inside the container
+	exec.MustRun("[fs] mount proc", "mount", "-t", "proc", "blabla", "/proc")
+	// drop the old root so only the container root remains visible
+	exec.MustRun("[fs] umount old_root", "umount", "-l", "/old_root")
+
+	out, err := exec.RunOut("[net] show IP", "ip", "addr")
+	if err != nil {
+		panic(fmt.Errorf("ip addr: %w", err))
+	}
+	fmt.Println(out)
+	fmt.Println("PID 1 = ", os.Getpid())
+
+	// replace PID 1 with the container command
+	exec.MustRun("[fs] exec cmd", "/bin/bash", "-c", "exec "+cmd)
 
 	os.Exit(0)
 }
@@ -77,7 +104,6 @@ func waitForVeth(name string) error {
 		if err := exec.Run("ip", "link", "set", name, "name", "eth0"); err == nil {
 			return nil
 		}
-		fmt.Println("[run] Initing the container 2.4")
 		time.Sleep(200 * time.Millisecond)
 	}
 	return fmt.Errorf("veth %s not present in netns", name)

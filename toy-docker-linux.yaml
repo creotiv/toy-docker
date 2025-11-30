@@ -17,7 +17,24 @@ provision:
     script: |
       apt-get update
       apt-get install -y iproute2 iptables systemd-container golang ca-certificates curl
+      modprobe overlay
+      modprobe br_netfilter
+      echo "overlay" > /etc/modules-load.d/container.conf
+      echo "br_netfilter" >> /etc/modules-load.d/container.conf
+
+      # Enable IP Forwarding (Critical for the Router part of our lecture)
+      echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
+      
+      # Enable Unprivileged User Namespaces (for non-root unshare)
+      echo "kernel.unprivileged_userns_clone=1" >> /etc/sysctl.conf
+      
+      # Apply sysctl changes
+      sysctl -p
+
       git clone https://github.com/creotiv/toy-docker
       cd toy-docker
       go build -o toy-docker ./cmd/toy-docker
       chmod +x ./toy-docker
+
+networks:
+  - lima: user-v2
