@@ -1,0 +1,23 @@
+vmType: vz
+images:
+  - location: https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-arm64.img
+    arch: aarch64
+
+cpus: 4
+memory: 8GiB
+disk: 80GiB
+
+mounts:
+  - location: "~"
+    writable: true
+
+# REQUIRED for container runtimes
+provision:
+  - mode: system
+    script: |
+      apt-get update
+      apt-get install -y iproute2 iptables systemd-container golang ca-certificates curl
+      git clone https://github.com/creotiv/toy-docker
+      cd toy-docker
+      go build -o toy-docker ./cmd/toy-docker
+      chmod +x ./toy-docker
